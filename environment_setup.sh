@@ -1,16 +1,15 @@
 #!/bin/bash
 
-
 # Set up the repository #
 # # # # # # # # # # # # #
 
 # update the apt package index
-sudo apt-get update
+sudo apt-get update -y
 
 # Update the apt package index and install packages to allow apt to use a repository over HTTPS:
 echo Installing/Checking packages from list
 sudo apt-get install \
-    apt-transport-https \
+    apt-transport-https -y\
     ca-certificates \
     curl \
     gnupg \
@@ -32,11 +31,11 @@ echo \
 
 # Update the apt package index (again)
 echo updating the apt package index for the second time.
-sudo apt-get update
+sudo apt-get update -y
 
 # install Docker engine
 echo installing Docker engine
-sudo apt-get install docker
+sudo apt-get install docker -y
 
 # # Receiving a GPG error when running apt-get update?
 # # Your default umask may be incorrectly configured, preventing detection of the repository public key file. 
@@ -47,7 +46,7 @@ sudo apt-get install docker
 
 
 # Install Docker Engine, containerd, and Docker Compose.
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
 
 # Start the Docker service
 sudo systemctl start docker
@@ -55,6 +54,14 @@ sudo systemctl start docker
 # Enable the Docker service to start on boot
 sudo systemctl enable docker
 
+# Add the current user to the docker group
+sudo usermod -aG docker $USER
+
+# Restart the Docker daemon
+sudo service docker restart
+
+# Apply the changes to the current shell session
+newgrp docker
 
 # Install rabbitmq as a Docker container
 sudo docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
@@ -65,9 +72,11 @@ sudo docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-manage
 sudo docker run -d --name redis -p 6379:6379 redis:latest
 
 # Install Prometheus as a Docker container
-sudo docker run -d --name prometheus -p 9090:9090 prom/prometheus
+# -v for mount the /etc/prometheus/ directory from the host machine to the Docker container when running the container.
+sudo docker run -d -p 9090:9090 -v /etc/prometheus:/etc/prometheus prom/prometheus
 
 # Configure Prometheus to monitor RabbitMQ and Redis
+sudo mkdir /etc/prometheus/
 echo "
 global:
   scrape_interval:     15s
