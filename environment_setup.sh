@@ -4,15 +4,16 @@
 # # # # # # # # # # # # #
 
 # update the apt package index
-sudo apt-get update -y
+sudo apt update -y
 
 # Update the apt package index and install packages to allow apt to use a repository over HTTPS:
 echo Installing/Checking packages from list
-sudo apt-get install \
+sudo apt install \
     apt-transport-https -y\
     ca-certificates \
     curl \
     gnupg \
+    software-properties-common \
     lsb-release
 
 # Add Docker’s official GPG key:
@@ -24,29 +25,29 @@ curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o 
 echo \
   "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
   $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
+apt-cache policy docker-ce
 
 # Install Docker Engine #
 # # # # # # # # # # # # #
 
 # Update the apt package index (again)
 echo updating the apt package index for the second time.
-sudo apt-get update -y
+sudo apt update -y
 
 # install Docker engine
 echo installing Docker engine
-sudo apt-get install docker -y
+sudo apt install docker -y
 
 # # Receiving a GPG error when running apt-get update?
 # # Your default umask may be incorrectly configured, preventing detection of the repository public key file. 
 # # Try granting read permission for the Docker public key file before updating the package index:
 
 # sudo chmod a+r /etc/apt/keyrings/docker.gpg
-# sudo apt-get update
+# sudo apt update
 
 
 # Install Docker Engine, containerd, and Docker Compose.
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
 
 # Start the Docker service
 sudo systemctl start docker
@@ -54,74 +55,170 @@ sudo systemctl start docker
 # Enable the Docker service to start on boot
 sudo systemctl enable docker
 
-# Install rabbitmq as a Docker container
-sudo docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+# Restart the Docker daemon
+sudo service docker restart
 
-# The default ports for RabbitMQ: 5672, RabbitMQ Management UI: 15672, and Redis: 6379,
+# # Apply the changes to the current shell session
+# newgrp docker
 
-# Install redis as a Docker container
-sudo docker run -d --name redis -p 6379:6379 redis:latest
+sudo curl -L "https://github.com/docker/compose/releases/download/1.28.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
 
-# Install Prometheus as a Docker container
-# -v for mount the /etc/prometheus/ directory from the host machine to the Docker container when running the container.
-sudo docker run -d -p 9090:9090 -v /etc/prometheus:/etc/prometheus prom/prometheus
+sudo apt install apache2-utils -y
 
-# Configure Prometheus to monitor RabbitMQ and Redis
-sudo mkdir /etc/prometheus/
-echo "
+# Password Generating #
+# # # # # # # # # # # #
+password=`openssl rand -base64 32`
+passwordHashed=`echo ${password} | htpasswd -inBC 10 "" | tr -d ':\n'`
+echo "${password}"
+
+cat << EOF >> ./web.yml
+basic_auth_users:
+  prometheus: "${passwordHashed}"
+
+EOF
+
+
+#  Prometheus Config  #
+# # # # # # # # # # # #
+
+cat << "EOF" > prometheus.yml
 global:
   scrape_interval:     15s
   evaluation_interval: 15s
+  external_labels:
+      monitor: 'codelab-monitor'
 
 scrape_configs:
+
   - job_name: 'rabbitmq'
+    metrics_path: '/metrics'
     static_configs:
-      - targets: ['rabbitmq:15672']
-    metrics_path: /api/metrics
-    params:
-      vhost: '/'
-    scheme: http
-    basic_auth:
-      username: guest
-      password: guest
+    - targets: ['rabbitmq_exporter:9090']
 
-  - job_name: 'redis'
+  - job_name: redis-exporter
     static_configs:
-      - targets: ['redis:6379']
-    metrics_path: /
-    scheme: http
-EOF"  | sudo tee /etc/prometheus/prometheus.yml > /dev/null
+      - targets: ['redis-exporter:9121']
 
-# Restart Prometheus for the changes to take effect
-sudo docker restart prometheus
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
 
-# Generate a random password for Prometheus
-PROMETHEUS_PASSWORD=$(openssl rand -base64 32)
-echo "Prometheus password: $PROMETHEUS_PASSWORD"
+  - job_name: 'influxdb'
+    static_configs:
+      - targets: ['influxdb:8086']
 
-# Save the Prometheus password to a file
-echo $PROMETHEUS_PASSWORD | sudo tee /etc/prometheus/prometheus_password.txt > /dev/null
+remote_write:
+  - url: "http://localhost:9201/write"
 
-# Inform the user about the password file location
-echo "Prometheus password is stored in /etc/prometheus/prometheus_password.txt"
+remote_read:
+  - url: "http://localhost:9201/read"
 
-# Create a Dockerfile to build a custom Prometheus container with the generated password
-cat <<EOF | sudo tee Dockerfile > /dev/null
-FROM prom/prometheus
-
-COPY prometheus_password.txt /etc/prometheus/
-
-CMD sed -i "s/PASSWORD/$(cat /etc/prometheus/prometheus_password.txt)/g" /etc/prometheus/prometheus.yml && prometheus --config.file=/etc/prometheus/prometheus.yml
 EOF
 
-# Build the custom Prometheus container
-sudo docker build -t prometheus-custom .
 
-# start the custom Prometheus container
-sudo docker run -d --name prometheus-custom -p 9090:9090 prometheus-custom
+#  Docker Compose #
+# # # # # # # # # # 
 
-# Clean up
-sudo rm -rf Dockerfile
+cat << "EOF" > docker-compose.yml
+version: '3'
+services:
+  rabbitmq:
+    image: rabbitmq:3.6.4-management
+    hostname: rabbitmq
+    expose:
+      - "9090"
+    ports:
+      - "4369:4369"
+      - "5671:5671"
+      - "5672:5672"
+      - "15672:15672"
+      - "25672:25672"
 
-# Exit with Success
-exit 0
+  rabbitmq_exporter:
+    image: kbudde/rabbitmq-exporter
+    depends_on:
+      - "rabbitmq"
+    ports:
+      - "9999:9090"
+    environment:
+      RABBIT_URL: "http://rabbitmq:15672"
+      RABBIT_USER: "guest"
+      RABBIT_PASSWORD: "guest"
+      PUBLISH_PORT: "9090"
+      OUTPUT_FORMAT: "JSON"
+      LOG_LEVEL: "debug"
+
+  redis:
+    image: "bitnami/redis:latest"
+    ports:
+      - 6379:6379
+    environment:
+      - REDIS_REPLICATION_MODE=master
+      - REDIS_PASSWORD=my_master_password
+
+  redis-exporter:
+    image: oliver006/redis_exporter
+    ports:
+      - 9121:9121
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis:6379"
+      REDIS_USER: null
+      REDIS_PASSWORD: my_master_password
+    
+  influxdb:              # (prometheus'un remote time-series database)
+    image: influxdb
+    ports:
+      - 8086:8086
+    volumes:
+      - ./:/var/lib/influxdb
+  
+  node-exporter:
+    image: prom/node-exporter:latest
+    ports:
+      - 9100:9100
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+
+  remotestorageadapter:
+    image: gavind/prometheus-remote-storage-adapter:1.0
+    ports:
+      - 9201:9201
+    command: ['-influxdb-url=http://localhost:8086', '-influxdb.database=prometheus', '-influxdb.retention-policy=autogen']
+    depends_on:
+      - influxdb
+
+  prometheus:
+    image: "prom/prometheus"
+    command: 
+      - '--web.config.file=/etc/prometheus/web.yml'
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./web.yml:/etc/prometheus/web.yml
+    ports:
+      - 9090:9090
+    depends_on:
+      - rabbitmq_exporter
+      - redis-exporter
+      - influxdb
+EOF
+
+sudo docker-compose -f docker-compose.yml up -d
+
+echo "${password}" > password.txt
+
+echo "username:prometheus, you can get your password at password.txt."
+
