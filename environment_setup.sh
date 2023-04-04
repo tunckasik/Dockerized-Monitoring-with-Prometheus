@@ -54,15 +54,6 @@ sudo systemctl start docker
 # Enable the Docker service to start on boot
 sudo systemctl enable docker
 
-# Add the current user to the docker group
-sudo usermod -aG docker $USER
-
-# Restart the Docker daemon
-sudo service docker restart
-
-# Apply the changes to the current shell session
-newgrp docker
-
 # Install rabbitmq as a Docker container
 sudo docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
 
