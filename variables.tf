@@ -25,3 +25,6 @@ variable "user_type"{
 variable "source_file_path" {
 
 }
+variable "ssh_identity_file" {
+
+}

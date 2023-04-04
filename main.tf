@@ -22,17 +22,17 @@ resource "aws_instance" "ec2" {
     Name = var.ec2_tag
   }
 
-  provisioner "file" {
-    source      = var.source_file_path
-    destination = "/"
-  }
+  # provisioner "file" {
+  #   source      = var.source_file_path
+  #   destination = "/"
+  # }
 
-  connection {
-    type        = "ssh"
-    user        = var.user_type
-    private_key = file("${var.ssh_private_key_path}${var.ssh_key_name}.pem")
-    host        = self.public_ip
-  }
+  # connection {
+  #   type        = "ssh"
+  #   user        = var.user_type
+  #   private_key = file("${var.ssh_private_key_path}${var.ssh_key_name}.pem")
+  #   host        = self.public_ip
+  # }
 }
 
 resource "aws_vpc" "vpc" {
@@ -75,5 +75,27 @@ resource "aws_subnet" "subnet" {
 
   tags = {
     Name = "${var.prefix}-subnet"
+  }
+}
+ data "template_file" "ssh_config" {
+  template = file("${path.module}/ec2-ssh-script.tpl")
+
+  vars = {
+    ssh_host_name = var.ec2_tag
+    ssh_identity_file = var.ssh_identity_file
+    ssh_user = var.user_type
+  }
+}
+
+resource "null_resource" "ssh_config" {
+  provisioner "file" {
+    content = data.template_file.ssh_config.rendered
+    destination = "~/.ssh/config"
+    connection {
+      type = "ssh"
+      user = "ubuntu"
+      private_key = file("~/.ssh/mat-ec2-key.pem")
+      host = "remote-ubuntu-hostname-or-ip"
+    }
   }
 }
