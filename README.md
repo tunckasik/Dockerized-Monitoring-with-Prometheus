@@ -1,6 +1,6 @@
 # Dockerized Monitoring with Prometheus
 
-# Terraform AWS EC2 Instance with VPC, Security Group, and Custom Applications
+Terraform AWS EC2 Instance with VPC, Security Group, and Custom Applications
 
 This Terraform configuration sets up an AWS EC2 instance within a custom VPC and configures a security group. It also provisions a file to the EC2 instance and establishes an SSH connection. The instance will have RabbitMQ, Redis, and Prometheus installed and configured using Docker containers.
 
@@ -61,41 +61,7 @@ This Terraform configuration sets up an AWS EC2 instance within a custom VPC and
 9. Clean up the Dockerfile.
 10. Exit with success.
 
-## Diagram
+## After installation SS
 
-+-------------------------+
-|       AWS Account       |
-|                         |
-| +---------------------+ |
-| |      AWS VPC        | |
-| |                     | |
-| | +-----------------+ | |
-| | |    AWS Subnet   | | |
-| | +-----------------+ | |
-| +---------------------+ |
-|                         |
-| +---------------------+ |
-| | AWS Security Group  | |
-| +---------------------+ |
-+-------------------------+
-               |
-               |
-               v
-+-------------------------+
-|    AWS EC2 Instance     |
-|                         |
-| +---------------------+ |
-| |     RabbitMQ        | |
-| |  (Docker container) | |
-| +---------------------+ |
-|                         |
-| +---------------------+ |
-| |       Redis         | |
-| |  (Docker container) | |
-| +---------------------+ |
-|                         |
-| +---------------------+ |
-| |     Prometheus      | |
-| |  (Custom container) | |
-| +---------------------+ |
-+-------------------------+
+![ss-prometheus](https://user-images.githubusercontent.com/101068723/234133506-803fa6cf-f88a-483e-bdf6-f21026dbf60a.png)
+
