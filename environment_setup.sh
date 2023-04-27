@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Set up the repository #
-# # # # # # # # # # # # #
+# Set up the Docker & Docker Compose #
+# # # # # # # # # # # # # # # # # # ##
 
 # update the apt package index
 sudo apt update -y
@@ -46,7 +46,7 @@ sudo apt install docker -y
 # sudo apt update
 
 
-# Install Docker Engine, containerd, and Docker Compose.
+# Install Docker Engine, containerd.
 sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
 
 # Start the Docker service
@@ -60,10 +60,11 @@ sudo service docker restart
 
 # # Apply the changes to the current shell session
 # newgrp docker
-
+# Install Docker Compose
 sudo curl -L "https://github.com/docker/compose/releases/download/1.28.5/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 sudo chmod +x /usr/local/bin/docker-compose
 
+# To be able to generate a password
 sudo apt install apache2-utils -y
 
 # Password Generating #
@@ -95,6 +96,10 @@ scrape_configs:
     metrics_path: '/metrics'
     static_configs:
     - targets: ['rabbitmq_exporter:9090']
+    
+  - job_name: 'prometheus'
+    static_configs:
+    - targets: ['localhost:9090']
 
   - job_name: redis-exporter
     static_configs:
@@ -167,7 +172,7 @@ services:
       REDIS_USER: null
       REDIS_PASSWORD: my_master_password
     
-  influxdb:              # (prometheus'un remote time-series database)
+  influxdb:              # (prometheus' remote time-series database)
     image: influxdb
     ports:
       - 8086:8086
@@ -214,6 +219,17 @@ services:
       - rabbitmq_exporter
       - redis-exporter
       - influxdb
+
+  grafana:
+    image: grafana/grafana:7.5.7
+    ports:
+      - 3000:3000
+    restart: unless-stopped
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+
+    depends_on:
+      - prometheus
 EOF
 
 sudo docker-compose -f docker-compose.yml up -d
@@ -221,4 +237,3 @@ sudo docker-compose -f docker-compose.yml up -d
 echo "${password}" > password.txt
 
 echo "username:prometheus, you can get your password at password.txt."
-
